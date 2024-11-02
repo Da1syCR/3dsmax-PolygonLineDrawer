@@ -78,6 +78,10 @@ fn createPolygonBetweenVertices =
 
 
 
+
+
+
+
 fn createVerticesAtHitPosition hitPos =
 (
     if g_emptyMeshObject != undefined then
@@ -94,7 +98,7 @@ fn createVerticesAtHitPosition hitPos =
         local secondVertexIndex = vertexCount + 2
 
         -- Устанавливаем координаты новых вертексов
-        setVert g_emptyMeshObject firstVertexIndex hitPos  -- Первый вертекс на позиции попадания
+        setVert g_emptyMeshObject firstVertexIndex hitPos  -- Первый вертекс
         setVert g_emptyMeshObject secondVertexIndex (hitPos + [g_vertexDistance, 0, 0])  -- Второй вертекс, смещенный на заданное расстояние
 
         print ("Добавлены новые вертексы: " + firstVertexIndex as string + ", " + secondVertexIndex as string)  -- Отладочный вывод
@@ -118,31 +122,26 @@ fn createVerticesAtHitPosition hitPos =
         print "Сначала создайте пустой объект."
     )
 )
+
 fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
 (
-    if msg == #mousePoint then
+    if g_drawingMode then
     (
-        local hitResult = rayIntersect obj ir
-        if hitResult != undefined then
+        if msg == #mousePoint then
         (
-            local hitPos = hitResult.position
-            local hitNormal = hitResult.normal
-            
-            if hitNormal != undefined then
+            if obj != undefined then
             (
-                -- Use hitPos and hitNormal
-                createVerticesAtHitPosition hitPos hitNormal
+                local hitPos = ir.pos
+                print ("Клик по поверхности: " + hitPos as string)
+                createVerticesAtHitPosition hitPos
             )
             else
             (
-                print "Normal not available."
+                print "Кликнули, но объект не определен."
             )
         )
-        else
-        (
-            print "No hit detected."
-        )
     )
+    return #continue
 )
 
 fn pickObjectAndSet =
