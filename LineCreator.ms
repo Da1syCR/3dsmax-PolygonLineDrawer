@@ -4,6 +4,8 @@ global g_vertexDistance = 10.0
 global g_emptyMeshObject = undefined
 global g_isPolygonCreating = false  -- Переменная для отслеживания состояния
 global g_surfaceOffset = 5.0  -- Новый параметр расстояния от поверхности
+global g_normalDirection = [0,1,0]
+
 fn createEmptyMeshObject =
 (
     g_emptyMeshObject = mesh()
@@ -77,6 +79,82 @@ fn createPolygonBetweenVertices =
 )
 
 
+-- Функция для получения нормали поверхности в заданной точке
+fn getNormalAt hitPos node =
+(
+    -- Проверяем, что узел (node) не является неопределённым и не был удалён
+    if (node != undefined and not isDeleted node) then
+    (
+        print("Node: " + (node as string))  -- Отладочный вывод для проверки узла
+
+        -- Получаем позицию узла
+        local nodePos = node.position  -- Получаем позицию узла
+        
+        -- Получаем максимальную Z координату узла
+        local nodeMaxZ = node.max.z  -- максимальная Z координата узла
+		
+        local rayStartPos = getViewportPosition()  -- Позиция, откуда будет запущен луч
+		print("Ray Start Position: " + (rayStartPos as string))  -- Отладочный вывод позиции старта луча
+
+        -- Вычисляем направление луча от rayStartPos к hitPos
+        local rayDirection = normalize (hitPos - rayStartPos)  -- Направление луча
+        print("Ray Direction: " + (rayDirection as string))  -- Отладочный вывод направления луча
+
+        -- Создаем луч с началом в rayStartPos и направлением rayDirection
+        local myRay = ray rayStartPos rayDirection  -- Создаем луч
+        print("Ray Created: " + (myRay as string))  -- Проверяем, что луч создан
+
+        -- Визуализация точек для дебага
+       -- local startPoint = dummy pos:rayStartPos  -- Точка старта (rayStartPos)
+      --  startPoint.name = "Ray Start"  -- Устанавливаем имя
+      --  local endPoint = dummy pos:(rayStartPos + rayDirection * 250)  -- Точка на расстоянии 250 в направлении rayDirection
+      --  endPoint.name = "Ray End"  -- Устанавливаем имя
+        
+        -- Выполняем проверку пересечения с объектом node
+        local intersection = intersectRay node myRay  -- Проверка пересечения
+        print("Intersection: " + (intersection as string))  -- Вывод результата пересечения
+
+        -- Проверка результата пересечения
+        if intersection != undefined then
+        (
+            -- Извлекаем позицию пересечения и нормаль
+            local hitPosition = intersection.pos  -- Позиция пересечения
+            local intersectionNormal = intersection.dir  -- Нормаль
+
+            print("Hit Position: " + (hitPosition as string))  -- Отладочный вывод позиции пересечения
+            print("Normal found: " + (intersectionNormal as string))  -- Отладочный вывод нормали
+            return intersectionNormal  -- Возвращаем нормаль
+        )
+        else
+        (
+            print("No intersection found, returning default normal.")  -- Сообщение об отсутствии пересечения
+            return [0, 0, 1]  -- Возвращаем стандартную нормаль (например, по оси Z)
+        )
+    )
+    else
+    (
+        print("Node is undefined or deleted.")  -- Сообщение об ошибке
+        return [0, 0, 1]  -- Возвращаем стандартную нормаль
+    )
+)
+
+
+
+
+
+fn getViewportPosition =
+(
+    -- Get the view transformation matrix
+    local viewTM = getViewTM()
+    print("viewTM: " + (viewTM as string))  -- Отладочный вывод позиции старта луча
+    -- Invert the matrix to get the world coordinates
+    local coordSysTM = Inverse(viewTM)
+    print("coordSysTM: " + (coordSysTM as string))  -- Отладочный вывод позиции старта луча
+    -- The position of the viewport (camera) is in the fourth row (row 4)
+    local viewportPos = coordSysTM.row4
+     print("viewportPos: " + (viewportPos as string))
+    return viewportPos
+)
 
 
 
@@ -93,35 +171,36 @@ fn createVerticesAtHitPosition hitPos =
         local newVertexCount = vertexCount + 2
         setNumVerts g_emptyMeshObject newVertexCount true  -- true - сохраняет топологию
 
-        -- Устанавливаем координаты для новых вертексов
+        -- Получаем нормаль поверхности в точке попадания
+        local normal = getNormalAt hitPos g_selectedObject  -- Эта функция должна быть реализована, чтобы получить нормаль
+		print("Computed normal: " + (normal as string))
+        -- Увеличиваем координаты вертексов на значение g_surfaceOffset по нормали
         local firstVertexIndex = vertexCount + 1
         local secondVertexIndex = vertexCount + 2
+			
+			
+        local perpendicularNormal = normalize (cross normal g_normalDirection)
+        
+        local perpendicularRayPosition = hitPos + (normal * g_surfaceOffset) + (perpendicularNormal * g_vertexDistance / 2.0)
+		
 
-        -- Устанавливаем координаты новых вертексов
-        setVert g_emptyMeshObject firstVertexIndex hitPos  -- Первый вертекс
-        setVert g_emptyMeshObject secondVertexIndex (hitPos + [g_vertexDistance, 0, 0])  -- Второй вертекс, смещенный на заданное расстояние
+        setVert g_emptyMeshObject firstVertexIndex perpendicularRayPosition -- Вертекс 1
 
-        print ("Добавлены новые вертексы: " + firstVertexIndex as string + ", " + secondVertexIndex as string)  -- Отладочный вывод
-
-        -- Обновляем объект, чтобы изменения стали видимыми
-        update g_emptyMeshObject  
-
-        -- Проверяем позиции всех вертексов после добавления новых
-        local finalVertexCount = getNumVerts g_emptyMeshObject
-        for i = 1 to finalVertexCount do
-        (
-            local vertPos = getVert g_emptyMeshObject i
-            print ("Вертекс " + i as string + " имеет позицию: " + vertPos as string)
-        )
-
-        -- Проверяем, нужно ли создать грань после добавления новых вершин
-        createPolygonBetweenVertices()
+		local perpendicularNormalInverse = normalize (cross normal g_normalDirection*-1)
+		local perpendicularRayPositionInverce = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0)
+        setVert g_emptyMeshObject secondVertexIndex (hitPos + (normal * g_surfaceOffset) - (g_vertexDistance / 2.0 * g_normalDirection))  -- Вертекс 2
+        print("Create second vertex. Create at position: " + ((hitPos + (normal * g_surfaceOffset)) as string) )
+        
+        print ("Созданы новые вертексы на позициях: " + (hitPos + (normal * g_surfaceOffset)) as string)  -- Отладочный вывод
+		
     )
     else
     (
         print "Сначала создайте пустой объект."
     )
+	createPolygonBetweenVertices()
 )
+
 
 fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
 (
