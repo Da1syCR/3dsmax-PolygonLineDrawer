@@ -236,6 +236,16 @@ fn enableDrawingMode =
 (
     g_drawingMode = true
     print "Режим рисования включен. Кликните по объекту для создания вертексов."
+    
+    -- Проверяем, что объект существует
+    if g_isPolygonCreating and g_emptyMeshObject != undefined then
+    (
+        select g_emptyMeshObject  -- Выбираем объект
+        subObjectLevel = 1  -- Включаем режим редактирования вертексов (Sub-Object Level: Vertex)
+        print "Режим редактирования вертексов включен для объекта g_emptyMeshObject."
+    )
+    
+    -- Запуск трекинга мыши для добавления вершин на выбранном объекте
     mouseTrack on:g_selectedObject prompt:"Кликните по поверхности объекта." trackCallback:mouseTrackCallback
 )
 
