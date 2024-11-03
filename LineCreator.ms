@@ -5,7 +5,7 @@ global g_emptyMeshObject = undefined
 global g_isPolygonCreating = false  -- Переменная для отслеживания состояния
 global g_surfaceOffset = 5.0  -- Новый параметр расстояния от поверхности
 global g_normalDirection = [0,1,0]
-
+global clickCount = 0
 fn createEmptyMeshObject =
 (
     g_emptyMeshObject = mesh()
@@ -39,8 +39,8 @@ fn createPolygonBetweenVertices =
                 local fourthVertexIndex = vertexCount     -- Индекс четвертого вертекса (4)
                 
                 -- Создаем два треугольника с обратным порядком для направления нормалей вверх
-                setFace g_emptyMeshObject (faceCount + 1) thirdVertexIndex secondVertexIndex firstVertexIndex  -- Первый треугольник: вершины 3, 2, 1
-                setFace g_emptyMeshObject (faceCount + 2) thirdVertexIndex fourthVertexIndex secondVertexIndex  -- Второй треугольник: вершины 3, 4, 2
+                setFace g_emptyMeshObject (faceCount + 1) thirdVertexIndex secondVertexIndex fourthVertexIndex  -- Первый треугольник: вершины 3, 2, 1
+                setFace g_emptyMeshObject (faceCount + 2) thirdVertexIndex firstVertexIndex secondVertexIndex  -- Второй треугольник: вершины 3, 4, 2
 
                 print ("Созданы грани, соединяющие вертексы: " + thirdVertexIndex as string + ", " + secondVertexIndex as string + ", " + firstVertexIndex as string + " и " + thirdVertexIndex as string + ", " + fourthVertexIndex as string + ", " + secondVertexIndex as string)  -- Отладочный вывод
 
@@ -160,7 +160,7 @@ fn getViewportPosition =
 
 
 
-fn createVerticesAtHitPosition hitPos =
+fn createVerticesAtHitPosition hitPos normalDirectionRotate =
 (
     if g_emptyMeshObject != undefined then
     (
@@ -173,46 +173,76 @@ fn createVerticesAtHitPosition hitPos =
 
         -- Получаем нормаль поверхности в точке попадания
         local normal = getNormalAt hitPos g_selectedObject  -- Эта функция должна быть реализована, чтобы получить нормаль
-		print("Computed normal: " + (normal as string))
+        print("Computed normal: " + (normal as string))
+
+        -- Обновляем g_normalDirection на основе normalDirectionRotate
+        g_normalDirection = normalize(cross normal normalDirectionRotate)
+        
         -- Увеличиваем координаты вертексов на значение g_surfaceOffset по нормали
         local firstVertexIndex = vertexCount + 1
         local secondVertexIndex = vertexCount + 2
-			
-			
-        local perpendicularNormal = normalize (cross normal g_normalDirection)
         
+        -- Находим перпендикулярный вектор
+        local perpendicularNormal = normalize(cross normal g_normalDirection)
+        
+        -- Позиция первого перпендикулярного луча
         local perpendicularRayPosition = hitPos + (normal * g_surfaceOffset) + (perpendicularNormal * g_vertexDistance / 2.0)
-		
-
         setVert g_emptyMeshObject firstVertexIndex perpendicularRayPosition -- Вертекс 1
 
-		local perpendicularNormalInverse = normalize (cross normal g_normalDirection*-1)
-		local perpendicularRayPositionInverce = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0)
-        setVert g_emptyMeshObject secondVertexIndex (hitPos + (normal * g_surfaceOffset) - (g_vertexDistance / 2.0 * g_normalDirection))  -- Вертекс 2
-        print("Create second vertex. Create at position: " + ((hitPos + (normal * g_surfaceOffset)) as string) )
+        -- Находим обратный перпендикулярный вектор
+        local perpendicularNormalInverse = normalize(cross normal (g_normalDirection * -1))
         
-        print ("Созданы новые вертексы на позициях: " + (hitPos + (normal * g_surfaceOffset)) as string)  -- Отладочный вывод
-		
+        -- Позиция второго перпендикулярного луча
+        local perpendicularRayPositionInverse = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0)
+        setVert g_emptyMeshObject secondVertexIndex (hitPos + (normal * g_surfaceOffset) - (g_vertexDistance / 2.0 * g_normalDirection))  -- Вертекс 2
+        
+        print("Созданы новые вертексы на позициях: " + (hitPos + (normal * g_surfaceOffset)) as string)  -- Отладочный вывод
     )
     else
     (
         print "Сначала создайте пустой объект."
     )
-	createPolygonBetweenVertices()
+    
+    createPolygonBetweenVertices()
 )
-
+global hitPosTest = undefined
+global hitPosSecondTest = undefined
 
 fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
 (
+	
     if g_drawingMode then
     (
+		
         if msg == #mousePoint then
         (
+			
+			print ("клик: " + clickCount as string)
             if obj != undefined then
             (
-                local hitPos = ir.pos
-                print ("Клик по поверхности: " + hitPos as string)
-                createVerticesAtHitPosition hitPos
+                if clickCount == 0 then
+                (
+                    hitPosTest = ir.pos
+                    clickCount += 1
+                    print ("Первый клик по поверхности: " + hitPos as string)
+                )
+                else if clickCount == 1 then
+                (
+                    hitPosSecondTest = ir.pos
+                    clickCount += 1
+                    print ("Второй клик по поверхности: " + hitPosSecondTest as string)
+                    
+                    -- Вычисляем вектор нормали от hitPos к hitPosSecond
+                    local normalVector = hitPosSecondTest - hitPosTest
+                    local normal = normalize normalVector
+                    print ("Нормаль от первого клика ко второму: " + normal as string)
+                    
+                    -- Сбросим переменные для следующего использования
+					createVerticesAtHitPosition hitPosTest normal
+                    clickCount = 0
+                    hitPosTest = undefined
+                    hitPosSecondTest = undefined
+                )
             )
             else
             (
@@ -236,16 +266,6 @@ fn enableDrawingMode =
 (
     g_drawingMode = true
     print "Режим рисования включен. Кликните по объекту для создания вертексов."
-    
-    -- Проверяем, что объект существует
-    if g_isPolygonCreating and g_emptyMeshObject != undefined then
-    (
-        select g_emptyMeshObject  -- Выбираем объект
-        subObjectLevel = 1  -- Включаем режим редактирования вертексов (Sub-Object Level: Vertex)
-        print "Режим редактирования вертексов включен для объекта g_emptyMeshObject."
-    )
-    
-    -- Запуск трекинга мыши для добавления вершин на выбранном объекте
     mouseTrack on:g_selectedObject prompt:"Кликните по поверхности объекта." trackCallback:mouseTrackCallback
 )
 
