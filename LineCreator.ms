@@ -2,18 +2,28 @@ global g_selectedObject = undefined
 global g_drawingMode = false
 global g_vertexDistance = 10.0
 global g_emptyMeshObject = undefined
-global g_isPolygonCreating = false -- Переменная для отслеживания состояния
-global g_surfaceOffset = 5.0 -- Новый параметр расстояния от поверхности
+global g_isPolygonCreating = false
+global g_surfaceOffset = 5.0
 global g_normalDirection = [0,1,0]
 global clickCount = 0
+global g_selectedMaterial = undefined
 
+global g_uvOffsetX = 0.0 -- Параметр для смещения по X
+global g_uvOffsetY = 0.036 -- Параметр для смещения по Y
+global g_second_uvOffsetY = 0.011
 
 fn createEmptyMeshObject =
-( 
+( 	
 	g_emptyMeshObject = mesh()  
 	g_emptyMeshObject.name = "MeshVertexObject" 
-	print ("Создан пустой объект: " + g_emptyMeshObject.name) 
 	setNumVerts g_emptyMeshObject 0
+
+	--meshop.applyUVWMap g_emptyMeshObject #planar
+	-- Apply selected material if available
+	if g_selectedMaterial != undefined then
+	(
+		g_emptyMeshObject.material = g_selectedMaterial
+	)
 )
 
 fn createPolygonBetweenVertices =
@@ -22,11 +32,8 @@ fn createPolygonBetweenVertices =
 	( 
 		if g_isPolygonCreating then 
 		( 
-			local vertexCount = getNumVerts g_emptyMeshObject -- Получаем текущее количество вертексов 
-			local faceCount = getNumFaces g_emptyMeshObject -- Получаем текущее количество граней 
-			 
-			print ("Текущее количество вертексов: " + vertexCount as string) -- Отладочный вывод 
-			print ("Текущее количество граней: " + faceCount as string) -- Отладочный вывод 
+			local vertexCount = getNumVerts g_emptyMeshObject
+			local faceCount = getNumFaces g_emptyMeshObject
 
 			-- Проверка, что есть как минимум 4 вершины 
 			if vertexCount >= 4 then 
@@ -34,42 +41,45 @@ fn createPolygonBetweenVertices =
 				-- Увеличиваем количество граней на 2 
 				setNumFaces g_emptyMeshObject (faceCount + 2) true 
 
-				-- Устанавливаем индексы для новых граней 
-				local firstVertexIndex = vertexCount - 3 -- Индекс первого вертекса (1) 
-				local secondVertexIndex = vertexCount - 2 -- Индекс второго вертекса (2) 
-				local thirdVertexIndex = vertexCount - 1 -- Индекс третьего вертекса (3) 
-				local fourthVertexIndex = vertexCount -- Индекс четвертого вертекса (4) 
-				 
-				-- Создаем два треугольника с обратным порядком для направления нормалей вверх 
-				setFace g_emptyMeshObject (faceCount + 1) thirdVertexIndex secondVertexIndex fourthVertexIndex -- Первый треугольник: вершины 3, 2, 1 
-				setFace g_emptyMeshObject (faceCount + 2) thirdVertexIndex firstVertexIndex secondVertexIndex -- Второй треугольник: вершины 3, 4, 2 
+				local firstVertexIndex = vertexCount - 3
+				local secondVertexIndex = vertexCount - 2
+				local thirdVertexIndex = vertexCount - 1
+				local fourthVertexIndex = vertexCount
 
-				print ("Созданы грани, соединяющие вертексы: " + thirdVertexIndex as string + ", " + secondVertexIndex as string + ", " + firstVertexIndex as string + " и " + thirdVertexIndex as string + ", " + fourthVertexIndex as string + ", " + secondVertexIndex as string) -- Отладочный вывод 
-
-				-- Установка видимости ребер 
-				-- Ребро между 1 и 3 (первый треугольник) 
-				setEdgeVis g_emptyMeshObject (faceCount + 1) 3 true 
-				-- Ребро между 2 и 4 (второй треугольник) 
-				setEdgeVis g_emptyMeshObject (faceCount + 2) 2 true 
-				-- Ребро между 1 и 2 (первый треугольник) 
-				setEdgeVis g_emptyMeshObject (faceCount + 1) 2 true 
-				-- Ребро между 3 и 4 (второй треугольник) 
-				setEdgeVis g_emptyMeshObject (faceCount + 2) 1 true 
-
-
-				print ("Установлена видимость ребер для последнего полигона.") 
-
-				-- Обновляем объект, чтобы изменения стали видимыми 
+				-- Создаем два треугольника
+				setFace g_emptyMeshObject (faceCount + 1) thirdVertexIndex secondVertexIndex fourthVertexIndex
+				setFace g_emptyMeshObject (faceCount + 2) thirdVertexIndex firstVertexIndex secondVertexIndex
+			
+				-- Установка видимости ребер
+				setEdgeVis g_emptyMeshObject (faceCount + 1) 3 true
+				setEdgeVis g_emptyMeshObject (faceCount + 2) 2 true
+				setEdgeVis g_emptyMeshObject (faceCount + 1) 2 true
+				setEdgeVis g_emptyMeshObject (faceCount + 2) 1 true
+				for faceIndex = faceCount to unwrapMod.getNumFaces() do
+				(
+					unwrapMod.selectFaces #{faceIndex} -- выбираем полигон
+					unwrapMod.detachFaces()            -- разрезаем полигон
+				)
+				
+				meshop.defaultMapFaces g_emptyMeshObject 1
+				meshop.setMapVert g_emptyMeshObject 1 (faceCount + 1)[0 + faceCount,g_uvOffsetY,0]
+				meshop.setMapVert g_emptyMeshObject 1 (faceCount + 2) [0 + faceCount,g_second_uvOffsetY,0]
+				meshop.setMapVert g_emptyMeshObject 1 (faceCount + 3) [1 + faceCount,g_uvOffsetY,0]
+				meshop.setMapVert g_emptyMeshObject 1 (faceCount + 4) [1 + faceCount,g_second_uvOffsetY,0]
+				
+				-- Обновляем объект, чтобы изменения стали видимыми
+				unwrapMod.commit()
 				update g_emptyMeshObject  
+				
 			) 
 			else 
-			( 
+			( unwrapMod = Unwrap_UVW()
+addModifier g_emptyMeshObject unwrapMod
 				print "Недостаточно вертексов для создания полигона (нужно минимум 4)." 
 			) 
 		) 
 		else 
 		( 
-			-- Если это первое нажатие, переключаем флаг для создания полигона 
 			g_isPolygonCreating = true 
 			print "Нажмите еще раз для создания полигона." 
 		) 
@@ -80,140 +90,69 @@ fn createPolygonBetweenVertices =
 	)
 )
 
-
--- Функция для получения нормали поверхности в заданной точке
 fn getNormalAt hitPos node =
 ( 
-	-- Проверяем, что узел (node) не является неопределённым и не был удалён 
 	if (node != undefined and not isDeleted node) then 
 	( 
-		print("Node: " + (node as string)) -- Отладочный вывод для проверки узла 
+		local nodePos = node.position
+		local nodeMaxZ = node.max.z
 
-		-- Получаем позицию узла 
-		local nodePos = node.position -- Получаем позицию узла 
-		 
-		-- Получаем максимальную Z координату узла 
-		local nodeMaxZ = node.max.z -- максимальная Z координата узла 
-		 
-		local rayStartPos = getViewportPosition()  -- Позиция, откуда будет запущен луч 
-		print("Ray Start Position: " + (rayStartPos as string)) -- Отладочный вывод позиции старта луча 
+		local rayStartPos = getViewportPosition()
+		local rayDirection = normalize (hitPos - rayStartPos)
 
-		-- Вычисляем направление луча от rayStartPos к hitPos 
-		local rayDirection = normalize (hitPos - rayStartPos) -- Направление луча 
-		print("Ray Direction: " + (rayDirection as string)) -- Отладочный вывод направления луча 
+		local myRay = ray rayStartPos rayDirection
+		local intersection = intersectRay node myRay
 
-		-- Создаем луч с началом в rayStartPos и направлением rayDirection 
-		local myRay = ray rayStartPos rayDirection -- Создаем луч 
-		print("Ray Created: " + (myRay as string)) -- Проверяем, что луч создан 
-
-		-- Визуализация точек для дебага 
-		-- local startPoint = dummy pos:rayStartPos  -- Точка старта (rayStartPos) 
-		--  startPoint.name = "Ray Start"  -- Устанавливаем имя 
-		--  local endPoint = dummy pos:(rayStartPos + rayDirection * 250)  -- Точка на расстоянии 250 в направлении rayDirection 
-		--  endPoint.name = "Ray End"  -- Устанавливаем имя 
-		 
-		-- Выполняем проверку пересечения с объектом node 
-		local intersection = intersectRay node myRay -- Проверка пересечения 
-		print("Intersection: " + (intersection as string)) -- Вывод результата пересечения 
-
-		-- Проверка результата пересечения 
 		if intersection != undefined then 
 		( 
-			-- Извлекаем позицию пересечения и нормаль 
-			local hitPosition = intersection.pos -- Позиция пересечения 
-			local intersectionNormal = intersection.dir -- Нормаль 
-
-			print("Hit Position: " + (hitPosition as string)) -- Отладочный вывод позиции пересечения 
-			print("Normal found: " + (intersectionNormal as string)) -- Отладочный вывод нормали 
-			return intersectionNormal -- Возвращаем нормаль 
+			local hitPosition = intersection.pos
+			local intersectionNormal = intersection.dir
+			return intersectionNormal
 		) 
 		else 
 		( 
-			print("No intersection found, returning default normal.") -- Сообщение об отсутствии пересечения 
-			return [0, 0, 1] -- Возвращаем стандартную нормаль (например, по оси Z) 
+			return [0, 0, 1]
 		) 
 	) 
 	else 
 	( 
-		print("Node is undefined or deleted.") -- Сообщение об ошибке 
-		return [0, 0, 1] -- Возвращаем стандартную нормаль 
+		return [0, 0, 1]
 	)
 )
 
-
-
-
-
 fn getViewportPosition =
 ( 
-	-- Get the view transformation matrix 
 	local viewTM = getViewTM()  
-	print("viewTM: " + (viewTM as string)) -- Отладочный вывод позиции старта луча 
-	-- Invert the matrix to get the world coordinates 
-	local coordSysTM = Inverse(viewTM) 
-	print("coordSysTM: " + (coordSysTM as string)) -- Отладочный вывод позиции старта луча 
-	-- The position of the viewport (camera) is in the fourth row (row 4) 
+	local coordSysTM = Inverse(viewTM)
 	local viewportPos = coordSysTM.row4 
-	print("viewportPos: " + (viewportPos as string)) 
 	return viewportPos
 )
-
-
-
-
 
 fn createVerticesAtHitPosition hitPos normalDirectionRotate =
 ( 
 	if g_emptyMeshObject != undefined then 
 	( 
-		local vertexCount = getNumVerts g_emptyMeshObject -- Получаем текущее количество вертексов 
-		print ("Текущее количество вертексов: " + vertexCount as string) -- Отладочный вывод 
-
-		-- Увеличиваем количество вертексов на 2 с сохранением топологии 
+		local vertexCount = getNumVerts g_emptyMeshObject
 		local newVertexCount = vertexCount + 2 
-		setNumVerts g_emptyMeshObject newVertexCount true -- true - сохраняет топологию 
+		setNumVerts g_emptyMeshObject newVertexCount true
 
-		-- Получаем нормаль поверхности в точке попадания 
-		local normal = getNormalAt hitPos g_selectedObject -- Эта функция должна быть реализована, чтобы получить нормаль 
-		print("Computed normal: " + (normal as string)) 
-		 
-		-- Увеличиваем координаты вертексов на значение g_surfaceOffset по нормали 
+		local normal = getNormalAt hitPos g_selectedObject
 		local firstVertexIndex = vertexCount + 1 
 		local secondVertexIndex = vertexCount + 2 
-		 
-		print("Normal: " + (normal as string)) 
-		print("normalDirectionRotate: " + (normalDirectionRotate as string))
 
-		-- Normalize the normalDirectionRotate and normal vectors
 		local normalDirectionRotateNormalized = normalize(normalDirectionRotate)
 		local normalNormalized = normalize(normal)
 
-		-- Calculate g_normalDirection as the cross-product between the normalized normalDirectionRotate and normal vectors, then normalize
-		g_normalDirection = normalDirectionRotate;
-		print("Perpendicular direction (g_normalDirection): " + (g_normalDirection as string))
-
-		-- Calculate perpendicularNormal by crossing normal with g_normalDirection, then normalize
+		g_normalDirection = normalDirectionRotate
 		local perpendicularNormal = normalize(cross normal g_normalDirection)
-		print("Perpendicular direction: " + (perpendicularNormal as string))
 
-		-- Calculate perpendicularRayPosition
 		local perpendicularRayPosition = hitPos + (normalNormalized * g_surfaceOffset) + (perpendicularNormal * g_vertexDistance / 2.0)
-		print("perpendicularRayPosition: " + (perpendicularRayPosition as string))
+		setVert g_emptyMeshObject firstVertexIndex perpendicularRayPosition
 
-		
-		setVert g_emptyMeshObject firstVertexIndex perpendicularRayPosition -- Вертекс 1 
-
-		
 		local perpendicularNormalInverse = normalize(cross normal -g_normalDirection) 
-		 
-		-- Позиция второго перпендикулярного луча 
-		local perpendicularRayPositionInverse = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0) 
-			
-			 
-		print("perpendicularRayPositionInverse: " + (perpendicularRayPositionInverse as string)) -- Отладочный вывод 
+		local perpendicularRayPositionInverse = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0)
 		setVert g_emptyMeshObject secondVertexIndex perpendicularRayPositionInverse
-		 
-		print("Созданы новые вертексы на позициях: " + (hitPos + (normal * g_surfaceOffset)) as string) -- Отладочный вывод 
+		
 	) 
 	else 
 	( 
@@ -222,39 +161,29 @@ fn createVerticesAtHitPosition hitPos normalDirectionRotate =
 	 
 	createPolygonBetweenVertices() 
 )
+
 global hitPosTest = undefined
 global hitPosSecondTest = undefined
 
 fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
 ( 
-	 
 	if g_drawingMode then 
 	( 
-		 
 		if msg == #mousePoint then 
 		( 
-			 
-			print ("клик: " + clickCount as string) 
 			if obj != undefined then 
 			( 
 				if clickCount == 0 then 
 				( 
 					hitPosTest = ir.pos 
 					clickCount += 1 
-					print ("Первый клик по поверхности: " + hitPos as string) 
 				) 
 				else if clickCount == 1 then 
 				( 
 					hitPosSecondTest = ir.pos 
 					clickCount += 1 
-					print ("Второй клик по поверхности: " + hitPosSecondTest as string) 
-					 
-					-- Вычисляем вектор нормали от hitPos к hitPosSecond 
 					local normalVector = hitPosSecondTest - hitPosTest 
 					local normal = normalize normalVector 
-					print ("Нормаль от первого клика ко второму: " + normal as string) 
-					 
-					-- Сбросим переменные для следующего использования 
 					createVerticesAtHitPosition hitPosTest normal 
 					clickCount = 0 
 					hitPosTest = undefined 
@@ -300,15 +229,43 @@ rollout drawingRollout "Режим рисования"
 	button btnEnable "Включить режим рисования" width:150 height:30 
 	button btnDisable "Выключить режим рисования" width:150 height:30 
 	spinner spVertexDistance "Расстояние между вертексами:" range: [0,100,10] type:#float fieldWidth:80 
+	materialbutton matSlot "Выбрать материал" width:150 height:30  -- Material button for material selection
+	
+	-- Label to display the selected material name
+	label lblMaterialName "Выбранный материал: None" width:200 height:30 
+	
+	-- Label to display the name of the empty mesh object
+	label lblEmptyObjectName "Пустой объект: None" width:200 height:30
+	
+	-- Label to display the name of the selected object
+	label lblSelectedObjectName "Выбранный объект: None" width:200 height:30
 
+	-- Event handler for material selection
+	on matSlot picked mat do
+	(
+		g_selectedMaterial = mat  -- Store the picked material in the global variable
+		print ("Материал выбран: " + g_selectedMaterial.name)
+		lblMaterialName.text = "Выбранный материал: " + g_selectedMaterial.name  -- Display material name
+		if g_emptyMeshObject != undefined then
+		(
+			g_emptyMeshObject.material = g_selectedMaterial  -- Apply the selected material to the mesh if it exists
+			update g_emptyMeshObject
+		)
+	)
+
+	-- Event handler for picking an object
+	on btnPick pressed do
+	( 
+		pickObjectAndSet()  -- Function to pick an object and set it to g_selectedObject
+		if g_selectedObject != undefined then
+		(
+			lblSelectedObjectName.text = "Выбранный объект: " + g_selectedObject.name  -- Display selected object name
+		)
+	) 
+	
 	on btnCreateEmpty pressed do 
 	( 
 		createEmptyMeshObject()  
-	) 
-
-	on btnPick pressed do 
-	( 
-		pickObjectAndSet()  
 	) 
 
 	on btnEnable pressed do 
@@ -324,8 +281,19 @@ rollout drawingRollout "Режим рисования"
 	on spVertexDistance changed newValue do 
 	( 
 		g_vertexDistance = newValue 
-		print ("Расстояние между вертексами обновлено: " + newValue as string) 
 	)
 )
 
-createDialog drawingRollout
+-- Function to pick and set the selected object
+fn pickObjectAndSet =
+( 
+	g_selectedObject = pickObject()  
+	if g_selectedObject != undefined then 
+	( 
+		print ("Выбран объект: " + g_selectedObject.name) 
+	)
+)
+
+createDialog drawingRollout width:250 height:250
+
+
