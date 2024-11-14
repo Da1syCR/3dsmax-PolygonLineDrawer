@@ -9,7 +9,7 @@ global clickCount = 0
 global g_selectedMaterial = undefined
 
 global g_uvOffsetX = 0.0 -- Параметр для смещения по X
-global g_uvOffsetY = 0.036 -- Параметр для смещения по Y
+global g_uvOffsetY = 0.036 
 global g_second_uvOffsetY = 0.011
 
 fn createEmptyMeshObject =
@@ -17,9 +17,6 @@ fn createEmptyMeshObject =
 	g_emptyMeshObject = mesh()  
 	g_emptyMeshObject.name = "MeshVertexObject" 
 	setNumVerts g_emptyMeshObject 0
-
-	--meshop.applyUVWMap g_emptyMeshObject #planar
-	-- Apply selected material if available
 	if g_selectedMaterial != undefined then
 	(
 		g_emptyMeshObject.material = g_selectedMaterial
@@ -55,11 +52,7 @@ fn createPolygonBetweenVertices =
 				setEdgeVis g_emptyMeshObject (faceCount + 2) 2 true
 				setEdgeVis g_emptyMeshObject (faceCount + 1) 2 true
 				setEdgeVis g_emptyMeshObject (faceCount + 2) 1 true
-				for faceIndex = faceCount to unwrapMod.getNumFaces() do
-				(
-					unwrapMod.selectFaces #{faceIndex} -- выбираем полигон
-					unwrapMod.detachFaces()            -- разрезаем полигон
-				)
+			
 				
 				meshop.defaultMapFaces g_emptyMeshObject 1
 				meshop.setMapVert g_emptyMeshObject 1 (faceCount + 1)[0 + faceCount,g_uvOffsetY,0]
@@ -68,7 +61,6 @@ fn createPolygonBetweenVertices =
 				meshop.setMapVert g_emptyMeshObject 1 (faceCount + 4) [1 + faceCount,g_second_uvOffsetY,0]
 				
 				-- Обновляем объект, чтобы изменения стали видимыми
-				unwrapMod.commit()
 				update g_emptyMeshObject  
 				
 			) 
@@ -118,6 +110,21 @@ fn getNormalAt hitPos node =
 	( 
 		return [0, 0, 1]
 	)
+)
+fn saveSettings = 
+(
+    local iniFile = getDir #userScripts + "\\settings.ini"
+    setINISetting iniFile "Settings" "VertexDistance" (g_vertexDistance as string)
+    setINISetting iniFile "Settings" "SurfaceOffset" (g_surfaceOffset as string)
+)
+fn loadSettings =
+(
+    local iniFile = getDir #userScripts + "\\settings.ini"
+    if doesFileExist iniFile then 
+    (
+        g_vertexDistance = (getINISetting iniFile "Settings" "VertexDistance") as float
+        g_surfaceOffset = (getINISetting iniFile "Settings" "SurfaceOffset") as float
+    )
 )
 
 fn getViewportPosition =
@@ -222,23 +229,19 @@ fn disableDrawingMode =
 	mouseTrack off
 )
 
-rollout drawingRollout "Режим рисования"
+rollout drawingRollout "Line Creator" width:304 height:312
 ( 
-	button btnCreateEmpty "Создать пустой объект" width:150 height:30 
-	button btnPick "Выбрать объект" width:150 height:30 
-	button btnEnable "Включить режим рисования" width:150 height:30 
-	button btnDisable "Выключить режим рисования" width:150 height:30 
-	spinner spVertexDistance "Расстояние между вертексами:" range: [0,100,10] type:#float fieldWidth:80 
-	materialbutton matSlot "Выбрать материал" width:150 height:30  -- Material button for material selection
-	
-	-- Label to display the selected material name
-	label lblMaterialName "Выбранный материал: None" width:200 height:30 
-	
-	-- Label to display the name of the empty mesh object
-	label lblEmptyObjectName "Пустой объект: None" width:200 height:30
-	
-	-- Label to display the name of the selected object
-	label lblSelectedObjectName "Выбранный объект: None" width:200 height:30
+	button 'btnCreateEmpty' "Create empty obj" pos:[16,8] width:129 height:35 align:#left
+	button 'btnPick' "Pick surface obj" pos:[16,48] width:128 height:35 align:#left
+	button 'btnEnable' "On edit mode" pos:[16,88] width:128 height:35 align:#left
+	button 'btnDisable' "Off edit mode" pos:[16,128] width:128 height:35 align:#left
+	materialButton 'matSlot' "Select Material" pos:[17,240] width:128 height:35 align:#left
+	spinner 'spVertexDistance' "Wide line" pos:[16,168] width:84 height:16 align:#left
+	spinner 'spVertexOffset' "Offset   " pos:[16,192] width:91 height:16 align:#left
+	editText 'edt1' "" pos:[16,216] width:120 height:16 align:#left
+	label 'lblMaterialName' "Select Material : None   " pos:[160,240] width:128 height:32 align:#left
+	label 'lblEmptyObjectName' "Name :" pos:[160,8] width:128 height:32 align:#left
+	label 'lblSelectedObjectName' "Select Obj:" pos:[160,48] width:128 height:32 align:#left
 
 	-- Event handler for material selection
 	on matSlot picked mat do
@@ -281,6 +284,13 @@ rollout drawingRollout "Режим рисования"
 	on spVertexDistance changed newValue do 
 	( 
 		g_vertexDistance = newValue 
+		saveSettings()
+	)
+	
+	on spVertexOffset changed newValue do 
+	( 
+		g_surfaceOffset = newValue
+		saveSettings()
 	)
 )
 
@@ -294,6 +304,9 @@ fn pickObjectAndSet =
 	)
 )
 
-createDialog drawingRollout width:250 height:250
+loadSettings()  -- Load saved values at the start
+createDialog drawingRollout
+drawingRollout.spVertexDistance.value = g_vertexDistance  -- Set spinner to loaded value
+drawingRollout.spVertexOffset.value = g_surfaceOffset     -- Set spinner to loaded value
 
 
