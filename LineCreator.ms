@@ -8,7 +8,7 @@ global g_normalDirection = [0,1,0]
 global clickCount = 0
 global g_selectedMaterial = undefined
 
-global g_uvOffsetX = 0.0 -- Параметр для смещения по X
+global g_uvOffsetX = 0.0
 global g_uvOffsetY = 0.036 
 global g_second_uvOffsetY = 0.011
 
@@ -65,8 +65,7 @@ fn createPolygonBetweenVertices =
 				
 			) 
 			else 
-			( unwrapMod = Unwrap_UVW()
-addModifier g_emptyMeshObject unwrapMod
+			(
 				print "Недостаточно вертексов для создания полигона (нужно минимум 4)." 
 			) 
 		) 
@@ -136,37 +135,55 @@ fn getViewportPosition =
 )
 
 fn createVerticesAtHitPosition hitPos normalDirectionRotate =
-( 
-	if g_emptyMeshObject != undefined then 
-	( 
-		local vertexCount = getNumVerts g_emptyMeshObject
-		local newVertexCount = vertexCount + 2 
-		setNumVerts g_emptyMeshObject newVertexCount true
+(
+    if g_emptyMeshObject != undefined then
+    (
+        select g_emptyMeshObject
+        max modify mode
+        subObjectLevel = 1
 
-		local normal = getNormalAt hitPos g_selectedObject
-		local firstVertexIndex = vertexCount + 1 
-		local secondVertexIndex = vertexCount + 2 
+        local vertexCount = getNumVerts g_emptyMeshObject
+        local newVertexCount = vertexCount + 2
+        setNumVerts g_emptyMeshObject newVertexCount true
 
-		local normalDirectionRotateNormalized = normalize(normalDirectionRotate)
-		local normalNormalized = normalize(normal)
+        local normal = getNormalAt hitPos g_selectedObject
+        local firstVertexIndex = vertexCount + 1
+        local secondVertexIndex = vertexCount + 2
 
-		g_normalDirection = normalDirectionRotate
-		local perpendicularNormal = normalize(cross normal g_normalDirection)
+        local normalDirectionRotateNormalized = normalize(normalDirectionRotate)
+        local normalNormalized = normalize(normal)
 
-		local perpendicularRayPosition = hitPos + (normalNormalized * g_surfaceOffset) + (perpendicularNormal * g_vertexDistance / 2.0)
-		setVert g_emptyMeshObject firstVertexIndex perpendicularRayPosition
+        g_normalDirection = normalDirectionRotate
+        local perpendicularNormal = normalize(cross normal g_normalDirection)
 
-		local perpendicularNormalInverse = normalize(cross normal -g_normalDirection) 
-		local perpendicularRayPositionInverse = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0)
-		setVert g_emptyMeshObject secondVertexIndex perpendicularRayPositionInverse
-		
-	) 
-	else 
-	( 
-		print "Сначала создайте пустой объект." 
-	) 
-	 
-	createPolygonBetweenVertices() 
+        -- Если заданы последние вершины, продолжаем от них
+        if g_lastVertexIndex1 != undefined and g_lastVertexIndex2 != undefined then
+        (
+            setVert g_emptyMeshObject firstVertexIndex (getVert g_continuationObject g_lastVertexIndex1)
+            setVert g_emptyMeshObject secondVertexIndex (getVert g_continuationObject g_lastVertexIndex2)
+        )
+        else
+        (
+            -- Иначе создаем вершины от текущего положения
+            local perpendicularRayPosition = hitPos + (normalNormalized * g_surfaceOffset) + (perpendicularNormal * g_vertexDistance / 2.0)
+            setVert g_emptyMeshObject firstVertexIndex perpendicularRayPosition
+
+            local perpendicularNormalInverse = normalize(cross normal -g_normalDirection)
+            local perpendicularRayPositionInverse = hitPos + (normal * g_surfaceOffset) + (perpendicularNormalInverse * g_vertexDistance / 2.0)
+            setVert g_emptyMeshObject secondVertexIndex perpendicularRayPositionInverse
+        )
+
+        -- Сохраняем индексы последних двух вершин для продолжения рисования
+        g_lastVertexIndex1 = firstVertexIndex
+        g_lastVertexIndex2 = secondVertexIndex
+
+    )
+    else
+    (
+        print "Сначала создайте пустой объект."
+    )
+
+    createPolygonBetweenVertices()
 )
 
 global hitPosTest = undefined
@@ -214,7 +231,34 @@ fn pickObjectAndSet =
 		print ("Выбран объект: " + g_selectedObject.name) 
 	)
 )
+fn selectContinuationObject =
+(
+    g_continuationObject = pickObject()
+    if g_continuationObject != undefined then
+    (
+        print ("Выбран объект для продолжения рисования: " + g_continuationObject.name)
 
+        -- Получение количества вершин
+        local vertexCount = getNumVerts g_continuationObject
+        if vertexCount >= 2 then
+        (
+            -- Устанавливаем последние две вершины как начальные
+            g_lastVertexIndex1 = vertexCount - 1
+            g_lastVertexIndex2 = vertexCount
+            print ("Последние вершины выбраны: " + g_lastVertexIndex1 as string + ", " + g_lastVertexIndex2 as string)
+        )
+        else
+        (
+            print "Недостаточно вершин для продолжения (нужно минимум 2)."
+            g_lastVertexIndex1 = undefined
+            g_lastVertexIndex2 = undefined
+        )
+    )
+    else
+    (
+        print "Не удалось выбрать объект."
+    )
+)
 fn enableDrawingMode =
 ( 
 	g_drawingMode = true 
@@ -225,24 +269,24 @@ fn enableDrawingMode =
 fn disableDrawingMode =
 ( 
 	g_drawingMode = false 
-	print "Режим рисования выключен." 
+	print "Режим рисования выключен. Последние вершины сохранены для продолжения." 
 	mouseTrack off
 )
 
-rollout drawingRollout "Line Creator" width:304 height:312
+rollout drawingRollout "Line Creator" width:224 height:208
 ( 
-	button 'btnCreateEmpty' "Create empty obj" pos:[16,8] width:129 height:35 align:#left
-	button 'btnPick' "Pick surface obj" pos:[16,48] width:128 height:35 align:#left
-	button 'btnEnable' "On edit mode" pos:[16,88] width:128 height:35 align:#left
-	button 'btnDisable' "Off edit mode" pos:[16,128] width:128 height:35 align:#left
-	materialButton 'matSlot' "Select Material" pos:[17,240] width:128 height:35 align:#left
-	spinner 'spVertexDistance' "Wide line" pos:[16,168] width:84 height:16 align:#left
-	spinner 'spVertexOffset' "Offset   " pos:[16,192] width:91 height:16 align:#left
-	editText 'edt1' "" pos:[16,216] width:120 height:16 align:#left
-	label 'lblMaterialName' "Select Material : None   " pos:[160,240] width:128 height:32 align:#left
-	label 'lblEmptyObjectName' "Name :" pos:[160,8] width:128 height:32 align:#left
-	label 'lblSelectedObjectName' "Select Obj:" pos:[160,48] width:128 height:32 align:#left
-
+	button 'btnCreateEmpty' "Create empty obj" pos:[8,8] width:100 height:30 align:#left
+	button 'btnPick' "Pick surface obj" pos:[8,40] width:100 height:30 align:#left
+	button 'btnEnable' "On edit mode" pos:[8,72] width:100 height:30 align:#left
+	button 'btnDisable' "Off edit mode" pos:[8,104] width:100 height:30 align:#left
+	button 'btnSelectContinuation' "Select obj to continue" pos:[8,136] width:100 height:30 align:#left
+	materialButton 'matSlot' "Select Material" pos:[8,168] width:100 height:30 align:#left
+	label 'lblEmptyObjectName' "Name :" pos:[120,8] width:100 height:30 align:#left
+	label 'lblSelectedObjectName' "Select Obj:" pos:[120,40] width:100 height:30 align:#left
+	label 'lblMaterialName' "Select Material : None   " pos:[119,168] width:100 height:30 align:#left
+	groupBox 'VertexSettings' "VertexSettings" pos:[112,64] width:100 height:96 align:#left
+	spinner 'spVertexDistance' "Wide line" pos:[120,87] width:44 height:16 align:#left
+	spinner 'spVertexOffset' "Offset   " pos:[120,112] width:51 height:16 align:#left
 	-- Event handler for material selection
 	on matSlot picked mat do
 	(
@@ -268,7 +312,11 @@ rollout drawingRollout "Line Creator" width:304 height:312
 	
 	on btnCreateEmpty pressed do 
 	( 
-		createEmptyMeshObject()  
+		createEmptyMeshObject() 
+		if g_emptyMeshObject != undefined then
+		(
+			lblEmptyObjectName.text = "Create obj: " + g_emptyMeshObject.name  -- Display selected object name
+		)
 	) 
 
 	on btnEnable pressed do 
